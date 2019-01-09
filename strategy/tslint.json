@@ -1,0 +1,11 @@
+{
+  "extends": ["@celo/typescript/tslint.json"],
+  "linterOptions": {
+    "exclude": ["src/native-base-theme/**", "**/__mocks__/**", "**/lcov-report/**"]
+  },
+  "rules": {
+    "no-relative-imports": true,
+    "no-unused-variable": [true, { "ignore-pattern": "^_" }],
+    "max-classes-per-file": [true, 2]
+  }
+}

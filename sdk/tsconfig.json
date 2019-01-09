@@ -1,0 +1,23 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "outDir": "dist",
+    "noImplicitAny": true,
+    "target": "es5",
+    "module": "commonjs",
+    "jsx": "preserve",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "removeComments": false,
+    "sourceMap": false,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "lib": ["dom", "es2015", "es2016"],
+    "declaration": true,
+    "composite": true
+  },
+  "include": ["src/**/*", "types/**/*", "contracts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
