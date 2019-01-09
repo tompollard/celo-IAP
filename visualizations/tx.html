@@ -1,0 +1,174 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>tx</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bignumber.js/8.0.1/bignumber.min.js"></script>
+
+<link href="https://fonts.googleapis.com/css?family=Inconsolata" rel="stylesheet">
+
+<style>
+div#txtable {
+  font-family: 'Inconsolata', monospace;
+  font-size: 10pt;
+  xwidth: 1218px;
+  white-space: pre;
+}
+div#txtable div { height: 17px; }
+div#txtable span { display: inline-block; padding: 0px 4px; }
+div#txtable span:nth-child(1) { width:  46px; }
+div#txtable span:nth-child(2) { width:  46px; }
+div#txtable span:nth-child(3) { width:  46px; }
+div#txtable span:nth-child(4) { width:  46px; }
+div#txtable span:nth-child(5) { width: 127px; }
+div#txtable span:nth-child(6) { width: 342px; }
+div#txtable span:nth-child(7) { width: 154px; }
+</style>
+
+<style id="uidynamicsheet"></style>
+
+<script type="text/javascript">
+
+const kWebSocketURL = "ws://localhost:8099/full"
+const kBase = "https://mitiapdryrun-blockscout.celo-networks-dev.org/";
+
+function fromwei(x) {
+  return BigNumber(x, 16).shiftedBy(-18).toString();
+}
+
+function fromwei_f(x) {
+  return BigNumber(x, 16).shiftedBy(-18).toNumber();
+}
+
+function exrate_fmt(x) {
+  if (x === null) return '-';  // div by 0 / NaN
+  return x.toFixed(4);
+}
+
+function ui_onmouseenter_addr(self) {
+  let klass = self.parentNode.parentNode.className;
+  let css = 'div.' + klass + ' { background: #f2f2f2; }';
+  document.getElementById('uidynamicsheet').innerText = css;
+}
+
+function ui_onmouseleave_addr(self) {
+  document.getElementById('uidynamicsheet').innerText = '';
+}
+
+function process_event(x) {
+  let fname = x.name;
+  let addr = x.address;
+
+  //if (fname === "ExchangeRateSet") return;  // too many / too slow
+
+  let txtable = document.getElementById('txtable');
+
+  // all the html source fragments, unfortunately way faster than incrementally
+  // building up the DOM.
+  let monster = [ ];
+
+    monster.push('<div');
+    if (addr) monster.push(' class="addr_' + addr + '"');
+    monster.push('>');
+
+    let rest = x.args;
+
+    let desc = '';
+    let bidinfo = '';
+    let exrate = '';
+    switch (fname) {
+      case 'Commit':
+        desc = fromwei(x.weiValue0) + ' ' + x.ercName0 + ' \u2192 ' + x.ercName1;
+        bidinfo = x.auctionNonce + '/' + x.auctionBidIndex;
+        break;
+      case 'Reveal':
+        desc = fromwei(x.weiValue0) + ' ' + x.ercName0 + ' \u2192 ' + fromwei(x.weiValue1) + ' ' + x.ercName1;
+        bidinfo = x.auctionNonce + '/' + x.auctionBidIndex;
+        exrate = exrate_fmt(x.approxExchangeRate);
+        break;
+      case 'Fill':
+        desc = fromwei(x.weiValue0) + ' ' + x.ercName0 + ' \u2192 ' + fromwei(x.weiValue1) + ' ' + x.ercName1;
+        bidinfo = x.auctionNonce + '/' + x.auctionBidIndex;
+        exrate = exrate_fmt(x.approxExchangeRate);
+        break;
+      case 'Withdrawal':
+        desc = '\u2192 ' + fromwei(x.weiValue0) + ' ' + x.ercName0;
+        break;
+      case 'Exchange':
+        desc = fromwei(x.weiValue0) + ' ' + x.ercName0 + ' \u2192 ' + fromwei(x.weiValue1) + ' ' + x.ercName1;
+        exrate = exrate_fmt(x.approxExchangeRate);
+        break;
+      case 'AuctionStageChanged':
+        desc = x.auctionStageName + ' ' + x.ercName0 + ' \u2192 ' + x.ercName1;
+        bidinfo = x.auctionNonce;
+        break;
+      case 'AuctionStarted':
+        desc = fromwei(x.weiValue0) + ' ' + x.ercName0 + ' \u2192 ' + x.ercName1;
+        bidinfo = x.auctionNonce;
+        break;
+      case 'ExchangeRateSet':
+        desc = fromwei(x.weiValue0) + ' ' + x.ercName0 + ' \u2192 ' + fromwei(x.weiValue1) + ' ' + x.ercName1;
+        exrate = exrate_fmt(x.approxExchangeRate);
+        break;
+    }
+
+    [parseInt(x.blockNumber, 16).toString().padStart(7, ' '),
+     //'<a href="' + kBase + 'tx/' + x.transactionHash + '">\u2026' + x.transactionHash.substr(-6) + '</a>'].forEach(x => {
+     '<a href="' + kBase + 'tx/' + x.transactionHash + '">\u22ee' + x.transactionHash.substr(-6) + '</a>',
+     addr ? '<a href="' + kBase + 'address/' + addr + '" onmouseleave="ui_onmouseleave_addr(this)" onmouseenter="ui_onmouseenter_addr(this)">\u22ee' + addr.substr(-6) + '</a>' : '',
+     bidinfo,
+     fname,
+     desc,
+     exrate,
+    ].forEach(x => {
+      //let td = document.createElement('td');
+      //td.innerHTML = x;
+      //tr.appendChild(td);
+      monster.push('<span>');
+      monster.push(x);
+      monster.push('</span>');
+    });
+    //txtable.appendChild(tr);
+    monster.push('</div>');
+
+  let div = document.createElement('div');
+  div.innerHTML = monster.join('');
+  txtable.insertBefore(div, txtable.firstChild);
+}
+
+let g_ws = null;
+
+function do_load() {
+  g_ws = new WebSocket(kWebSocketURL);
+  g_ws.addEventListener('message', e => {
+    //console.log(e);
+    let obj = JSON.parse(e.data);
+    console.log('here');
+    console.log(obj.type);
+    if (obj.type === "snapshot") {
+      document.getElementById('txtable').innerHTML = '';
+      obj.records.forEach(x => {
+        //if (x.name === "ExchangeRateSet") return;
+        process_event(x);
+      });
+    } else {
+      console.log(obj);
+      process_event(obj);
+    }
+  });
+  g_ws.addEventListener('close', e => {
+    document.getElementById('txtable').innerHTML = 'websocket disconnected, retrying...';
+    setTimeout(do_load, 10 * 1000);
+  });
+}
+
+window.onload = function() {
+  do_load();
+};
+
+</script>
+</head>
+
+<body>
+<div id="txtable"></div>
+
+</html>
