@@ -1,0 +1,216 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>ex</title>
+
+<link href="https://fonts.googleapis.com/css?family=Inconsolata" rel="stylesheet">
+
+<style>
+body {
+  font-family: 'Inconsolata', monospace;
+  font-size: 10pt;
+  white-space: pre;
+  overflow: hidden;
+  margin-top: 0;
+}
+div#modes { white-space: normal; margin-top: -40px; }
+div#modes span { margin-left: 10px; }
+div#modes span a { text-decoration: none; }
+</style>
+
+<script type="text/javascript">
+
+const kWebSocketURL = "ws://localhost:8099/full"
+const kBase = "https://mitiapstaging-blockscout.celo-networks-dev.org/";
+
+let g_data = [ ];
+let g_last = null;
+
+function process_event(x) {
+  let fname = x.name;
+  let addr = x.address;
+
+  if (fname !== "ExchangeRateSet") return;
+  if (x.ercName0 !== "_PEG" || x.ercName1 !== "cUSD") return;
+
+  g_data.push(parseInt(x.blockNumber, 16));
+  g_data.push(x.approxExchangeRate);
+  g_last = x;
+}
+
+let g_init_dpi = -1;
+function init_canvas_dpi() {
+  if (g_init_dpi !== -1) return g_init_dpi;
+
+  let canvas = document.getElementById('chartcanvas');
+  let dpi = window.devicePixelRatio || 1;
+  console.log('Using DPI: ' + dpi);
+
+  let w = canvas.width, h = canvas.height;
+  canvas.width  = w * dpi;
+  canvas.height = h * dpi;
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+
+  if (dpi !== 2) {
+    let ctx = canvas.getContext('2d');
+    ctx.scale(dpi/2, dpi/2);
+  }
+
+  g_init_dpi = dpi;
+  return g_init_dpi;
+}
+
+let g_range = 'all';
+let g_mode = 'line';
+
+function update_latest() {
+  if (g_last === null) return;
+  let n = document.getElementById('latest');
+  n.children[1].innerText = g_last.approxExchangeRate.toFixed(4);
+  let a = n.children[2];
+  a.href = kBase + "tx/" + g_last.transactionHash;
+  a.style.marginLeft = '10px';
+  n.children[2].innerText = 'block ' + g_last.blockNumber;
+}
+
+function do_draw() {
+  let canvas = document.getElementById('chartcanvas');
+  let ctx = canvas.getContext('2d');
+  let dpi = init_canvas_dpi();
+
+  let w = canvas.width, h = canvas.height;
+  w *= 2 / dpi;
+  h *= 2 / dpi;
+
+  let h2 = h / 2;
+
+  console.log([w, h]);
+
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, w, h);
+
+  if (g_data.length < 4) return;
+
+  let b0 = g_data[0];  // first block
+  let b1 = g_data[g_data.length - 2];  // last block
+  let bw = b1 - b0;
+
+  let r = 1;
+
+  switch (g_range) {
+    case 'all':
+      break;
+    case '100000': bw = 100000; b0 = b1 - bw; break;
+    case '50000':  bw =  50000; b0 = b1 - bw; break;
+    case '20000':  bw =  20000; b0 = b1 - bw; break;
+    case '10000':  bw =  10000; b0 = b1 - bw; break;
+    case '1000':   bw =   1000; b0 = b1 - bw; break;
+  }
+
+  if (bw <= 20000) r = 2;
+  if (bw <=  1000) r = 3;
+
+  // basically push some margins a bit so you can see the points on both
+  // sides, calculate this based on screen space of r (how many blocks is r).
+  let nudge = Math.ceil(r*2/w * bw);
+  b0 -= nudge; b1 += nudge; bw = b1-b0;
+
+  // Plot with a value of 1 at the middle (h/2), the y-factor then controls
+  // the range that will be graphed, for example 1 would be [0, 2], and
+  // 2 would be [0.5, 1.5]. 5 would be [0.8, 1.2], etc.
+  // NOTE: We also have to flip Y to map to screen coordinates.
+  let kYFactor = 5;
+
+  ctx.strokeStyle = '#ccc';
+
+  for (let i = -20; i <= 20; ++i) {
+    ctx.setLineDash(i === 0 ? [] : [4, 4]);
+    ctx.beginPath();
+    let rate = (1 - (i / 100));
+    let y = (1 + kYFactor*(1-rate)) * h2;
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  ctx.setLineDash([]);
+
+  let lines = g_mode === 'line';
+
+  if (lines) ctx.strokeStyle = 'red';
+  else       ctx.fillStyle   = 'red';
+
+  if (lines) ctx.beginPath();
+
+  for (let i = 1, il = g_data.length; i < il; i += 2) {
+    let block = g_data[i - 1];
+    if (block < b0) continue;
+    let rate  = g_data[i];
+
+    let x = (block - b0) / bw * w;
+    //let y = (2 - rate) * h2;
+    let y = (1 + kYFactor*(1-rate)) * h2;
+
+    if (lines && i === 1) ctx.moveTo(x, y);
+
+    if (lines) ctx.lineTo(x, y);
+    else       ctx.fillRect(x-r, y-r, r+r, r+r);
+  }
+
+  if (lines) ctx.stroke();
+}
+
+let g_ws = null;
+
+function do_load() {
+  g_ws = new WebSocket(kWebSocketURL);
+  g_ws.addEventListener('message', e => {
+    //console.log(e);
+    let obj = JSON.parse(e.data);
+    if (obj.type === "snapshot") {
+      g_last = null; g_data.length = 0;  // clear
+      obj.records.forEach(x => {
+        process_event(x);
+      });
+      update_latest();
+      do_draw();
+    } else {
+      process_event(obj);
+      update_latest();
+      do_draw();
+    }
+  });
+  g_ws.addEventListener('close', e => {
+    g_last = null; g_data.length = 0;  // clear
+    do_draw();
+    //document.getElementById('txtable').innerHTML = 'websocket disconnected, retrying...';
+    setTimeout(do_load, 10 * 1000);
+  });
+}
+
+window.onload = function() {
+  do_load();
+};
+
+</script>
+</head>
+
+<body>
+<div id="latest"><span>Latest: </span> <span></span><a href="#" target="_blank"></a></div>
+<canvas id="chartcanvas" width="800" height="600"></canvas>
+<div style="position: absolute; left: 810px; top:  25px;">1.20</div>
+<div style="position: absolute; left: 810px; top: 335px;">1.00</div>
+<div style="position: absolute; left: 810px; top: 635px;">0.80</div>
+
+<div id="modes">
+<span><a href="#" onclick="g_range='all';do_draw();return false;">all</a></span>
+<span><a href="#" onclick="g_range='100000';do_draw();return false;">100k</a></span>
+<span><a href="#" onclick="g_range='50000';do_draw();return false;">50k</a></span>
+<span><a href="#" onclick="g_range='20000';do_draw();return false;">20k</a></span>
+<span><a href="#" onclick="g_range='10000';do_draw();return false;">10k</a></span>
+<span><a href="#" onclick="g_range='1000';do_draw();return false;">1k</a></span>
+<span><a href="#" onclick="g_mode='scatter';do_draw();return false;">&#8756;</a></span>
+<span><a href="#" onclick="g_mode='line';do_draw();return false;">&#12336;</a></span>
+</div>
+
+</html>
