@@ -1,0 +1,42 @@
+{
+    "name": "@types/underscore",
+    "version": "1.8.9",
+    "description": "TypeScript definitions for Underscore",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Boris Yankov",
+            "url": "https://github.com/borisyankov",
+            "githubUsername": "borisyankov"
+        },
+        {
+            "name": "Josh Baldwin",
+            "url": "https://github.com/jbaldwin",
+            "githubUsername": "jbaldwin"
+        },
+        {
+            "name": "Christopher Currens",
+            "url": "https://github.com/ccurrens",
+            "githubUsername": "ccurrens"
+        },
+        {
+            "name": "Cassey Lottman",
+            "url": "https://github.com/clottman",
+            "githubUsername": "clottman"
+        },
+        {
+            "name": "Ard Timmerman",
+            "url": "https://github.com/confususs",
+            "githubUsername": "confususs"
+        }
+    ],
+    "main": "",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "9e3dd31bd3991703a4b98b69256531a42d110f7deb57b163aeefe1124ee3930a",
+    "typeScriptVersion": "2.0"
+}

@@ -1,2 +1,12 @@
-# iap
-Resources for the Celo MIT IAP challenge
+# Celo MIT IAP Resources
+This is the home of all the resources participants will need in order to build their own automated trading strategies in the Celo MIT IAP challenge.
+
+## Requirements
+
+## NVM
+
+NVM (Node Version Manager) helps to manage which version of node you currently have running. Install it [here](https://github.com/creationix/nvm#installation)
+
+## Yarn
+
+Yarn is a better [npm (node package manager)](https://www.npmjs.com/) client. It installs the dependencies necessary to run all of the projects. Install it - make sure to use the `--without-node` flag since we are using nvm - [here](https://yarnpkg.com/en/docs/install#mac-stable)
