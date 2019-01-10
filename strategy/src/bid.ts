@@ -8,63 +8,54 @@ import GoldToken from '@celo/sdk/dist/contracts/GoldToken'
 import StableToken from '@celo/sdk/dist/contracts/StableToken'
 import { unlockAccount } from '@celo/sdk/dist/src/account-utils'
 import { executeBid } from '@celo/sdk/dist/src/auction-utils'
+import { selectContractByAddress } from '@celo/sdk/dist/src/contract-utils'
 import { exchangePrice } from '@celo/sdk/dist/src/exchange-utils'
-import {
-  balanceOf,
-  selectTokenContractByIdentifier,
-} from '@celo/sdk/dist/src/erc20-utils'
+import { balanceOf } from '@celo/sdk/dist/src/erc20-utils'
 import { Exchange as ExchangeType } from '@celo/sdk/types/Exchange'
 
 // Strategy parameters (feel free to play around with these)
-const bidAmount = 1.1
-const randomFactor = (Math.random() * .001) - 0.0005
+const bidDiscount = 1.1 // The 'discount' we bid at (1.1 = 10%)
+const balanceProportionToBid = 0.9 // The proportion of our valance we bid
+const randomFactor = (Math.random() * .001) - 0.0005  // a random 'jitter' to make a bid easy to identify
 
 // Additional parameters for multiBidStrategy
-const numBids = 5       // The number of bids to make, centered around bidAmount
+const numBids = 5       // The number of bids to make, centered around bidDiscount
 const bidRange = 0.1    // Spread of bids
+const FOUR_WEEKS = 4 * 7 * 24 * 3600
 
-const simpleBidStrategy = async () => {
-  const argv = require('minimist')(process.argv.slice(2), {
-    string: ['host'],
-    default: { host: 'localhost', noUnlock: true },
-  })
-  // @ts-ignore
-  const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
+// This implements a simple auction strategy. We bid 90% of our balance in the auction and
+// ask for tokens such that we get a 10% discount relative to the current price quoted
+// on the exchange.
+const simpleBidStrategy = async (web3: any) => {
+
+  // Initialize contract objects
   const exchange: ExchangeType = await Exchange(web3)
   const auction = await BSTAuction(web3)
   const stableToken = await StableToken(web3)
   const goldToken = await GoldToken(web3)
-  const account = await unlockAccount(web3, 2419200) // Unlock for 4 weeks so our strategy can run.
+  const account = await unlockAccount(web3, FOUR_WEEKS) // Unlock for 4 weeks so our strategy can run.
 
-  // TODO: add multiple loops
-
-  // This implements a simple auction strategy. We bid 90% of our balance in the auction and
-  // ask for tokens such that we get a 10% discount relative to the current price quoted
-  // on the exchange.
   auction.events.AuctionStarted().on('data', async (event: any) => {
-    const sellToken = selectTokenContractByIdentifier(
+    const sellToken = selectContractByAddress(
       [stableToken, goldToken],
       event.returnValues.sellToken
     )
-    const buyToken = selectTokenContractByIdentifier(
+    const buyToken = selectContractByAddress(
       [stableToken, goldToken],
       event.returnValues.buyToken
     )
 
-    // Aim to sell up to 90% of our sellToken balance in the auction.
-    // TODO*asa): Does this work with GoldToken?
     const sellTokenBalance = await balanceOf(sellToken, account, web3)
-    const sellTokenAmount = sellTokenBalance.times(0.9)
-
-
-    // a random 'jitter' to make a bid easy to identify
+    const sellTokenAmount = sellTokenBalance
+      .times(balanceProportionToBid)
+      .decimalPlaces(0)
     
-    const bidDiscount = bidAmount + randomFactor
+    const bidAdjustment = bidDiscount + randomFactor
 
     const price = await exchangePrice(exchange, buyToken, sellToken)
     const buyTokenAmount = sellTokenAmount
       .times(price)
-      .times(bidDiscount)
+      .times(bidAdjustment)
       .decimalPlaces(0)
 
     // Bid on the auction
@@ -77,47 +68,39 @@ const simpleBidStrategy = async () => {
       account,
       web3
     )
-    console.info(auctionSellTokenWithdrawn, auctionBuyTokenWithdrawn)
+    console.info(`Bid successfully executed!\n Sell Token Amount Withdrawn: ${auctionSellTokenWithdrawn}\n Buy Token Amount Withdrawn: ${auctionBuyTokenWithdrawn}`)
   })
 }
 
-const multiBidStrategy = async () => {
-  const argv = require('minimist')(process.argv.slice(2), {
-    string: ['host'],
-    default: { host: 'localhost', noUnlock: true },
-  })
-  // @ts-ignore
-  const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
+const multiBidStrategy = async (web3: any) => {
+
   const exchange: ExchangeType = await Exchange(web3)
   const auction = await BSTAuction(web3)
   const stableToken = await StableToken(web3)
   const goldToken = await GoldToken(web3)
-  const account = await unlockAccount(web3, 2419200) // Unlock for 4 weeks so our strategy can run.
+  const account = await unlockAccount(web3, FOUR_WEEKS) // Unlock for 4 weeks so our strategy can run.
 
-  // TODO: add multiple loops
-
-  // This implements a simple auction strategy. We bid 90% of our balance in the auction and
-  // ask for tokens such that we get a 10% discount relative to the current price quoted
-  // on the exchange.
   auction.events.AuctionStarted().on('data', async (event: any) => {
-    const sellToken = selectTokenContractByIdentifier(
+    const sellToken = selectContractByAddress(
       [stableToken, goldToken],
       event.returnValues.sellToken
     )
-    const buyToken = selectTokenContractByIdentifier(
+    const buyToken = selectContractByAddress(
       [stableToken, goldToken],
       event.returnValues.buyToken
     )
 
-
     const sellTokenBalance = await balanceOf(sellToken, account, web3)
-    const sellTokenAmount = sellTokenBalance.times(0.9).times(1.0/numBids)
+    const sellTokenAmount = sellTokenBalance
+      .times(balanceProportionToBid)
+      .times(1.0/numBids)
+      .decimalPlaces(0)
 
     const price = await exchangePrice(exchange, buyToken, sellToken)
 
     const buyTokenDeltas = _.range(
-      bidAmount - bidRange,
-      bidAmount + bidRange,
+      bidDiscount - bidRange,
+      bidDiscount + bidRange,
       bidRange / numBids
     )
     
@@ -137,19 +120,24 @@ const multiBidStrategy = async () => {
         account,
         web3
       )
-      console.info(auctionSellTokenWithdrawn, auctionBuyTokenWithdrawn)
+      console.info(`Bid successfully executed!\n Sell Token Amount Withdrawn: ${auctionSellTokenWithdrawn}\n Buy Token Amount Withdrawn: ${auctionBuyTokenWithdrawn}`)
     });
 
-    // a random 'jitter' to make a bid easy to identify
   })
 }
 
 const bid = async () => {
+  const argv = require('minimist')(process.argv.slice(2), {
+    string: ['host'],
+    default: { host: 'localhost', noUnlock: true },
+  })
+  // @ts-ignore
+  const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
   if (process.argv[2] == 'multi') {
-    multiBidStrategy()
+    multiBidStrategy(web3)
   }
   else if (process.argv[2] == 'simple') {
-    simpleBidStrategy()
+    simpleBidStrategy(web3)
   }
   else {
     throw new Error('please specify which strategy to run: simple or multi')
