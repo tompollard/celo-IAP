@@ -9,12 +9,21 @@ import GoldToken from '@celo/sdk/dist/contracts/GoldToken'
 import StableToken from '@celo/sdk/dist/contracts/StableToken'
 import { unlockAccount } from '@celo/sdk/dist/src/account-utils'
 import { executeBid, findAuctionInProgress } from '@celo/sdk/dist/src/auction-utils'
+import { exchangePrice } from '@celo/sdk/dist/src/exchange-utils'
 import {
   selectTokenContractByAddress,
 } from '@celo/sdk/dist/src/erc20-utils'
 import { Exchange as ExchangeType } from '@celo/sdk/types/Exchange'
 
-const discountBidStrategy = async () => {
+// Strategy parameters (feel free to play around with these)
+const bidAmount = 1.1
+const randomFactor = (Math.random() * .001) - 0.0005
+
+// Additional parameters for multiBidStrategy
+const numBids = 5       // The number of bids to make, centered around bidAmount
+const bidRange = 0.1    // Spread of bids
+
+const simpleBidStrategy = async () => {
   // @ts-ignore
   const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
   const exchange: ExchangeType = await Exchange(web3)
@@ -41,20 +50,19 @@ const discountBidStrategy = async () => {
     const currentAuction = findAuctionInProgress(stableToken, goldToken, auction)
     // Aim to sell up to 90% of our sellToken balance in the auction.
     // TODO*asa): Does this work with GoldToken?
-    const sellTokenAmount = new BigNumber(await currentAuction.sellToken.methods.balanceOf(account).call()).times(0.9)
+    const sellTokenBalance = new BigNumber(await currentAuction.sellToken.methods.balanceOf(account).call())
+    const sellTokenAmount = sellTokenBalance.times(0.9)
+
 
     // a random 'jitter' to make a bid easy to identify
-    const randomFactor = (Math.random() * .001) - 0.0005
-    const bidDiscount = 1.1 + randomFactor
+    
+    const bidDiscount = bidAmount + randomFactor
 
-    // TODO(asa): Is this the right order?
-    const exchangePrice = await getPrice(buyToken, sellToken)
+    const price = await exchangePrice(exchange, buyToken, sellToken)
     const buyTokenAmount = sellTokenAmount
-      .times(exchangePrice)
+      .times(price)
       .times(bidDiscount)
       .decimalPlaces(0)
-    
-    console.info(`submitting bid of ${buyTokenAmount} ${} for ${sellTokenAmount} ${}`)
 
     // Bid on the auction
     const [auctionSellTokenWithdrawn, auctionBuyTokenWithdrawn] = await executeBid(
@@ -72,7 +80,7 @@ const discountBidStrategy = async () => {
 
 const multiBidStrategy = async () => {
   // @ts-ignore
-  const web3: Web3 = new Web3(`ws://localhost:8546`)
+  const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
   const exchange: ExchangeType = await Exchange(web3)
   const auction = await BSTAuction(web3)
   const stableToken = await StableToken(web3)
@@ -95,34 +103,23 @@ const multiBidStrategy = async () => {
     )
 
     const currentAuction = findAuctionInProgress(stableToken, goldToken, auction)
-    // Aim to sell up to 90% of our sellToken balance in the auction.
-    // TODO(asa): Does this work with GoldToken?
+
     const sellTokenBalance = new BigNumber(await currentAuction.sellToken.methods.balanceOf(account).call())
-    const sellTokenAmount = sellTokenBalance.times(0.9)
+    const sellTokenAmount = sellTokenBalance.times(0.9).times(1.0/numBids)
 
-    // The number of bids to make
-    const numBids = 5
-
-    // The number of bids to make centered around the interval
-    const bidCenter = 1.1
-    const bidRange = 0.1
+    const price = await exchangePrice(exchange, buyToken, sellToken)
 
     const buyTokenDeltas = _.range(
-      bidCenter - bidRange,
-      bidCenter + bidRange,
+      bidAmount - bidRange,
+      bidAmount + bidRange,
       bidRange / numBids
     )
     
-    buyTokenDeltas.forEach(buyTokenDelta => {
-
-      // TODO(asa): Is this the right order?
-      const exchangePrice = await getPrice(buyToken, sellToken)
+    buyTokenDeltas.forEach(delta => {
       const buyTokenAmount = sellTokenAmount
-        .times(exchangePrice)
-        .times(buyTokenDelta)
+        .times(price)
+        .times(delta + randomFactor)
         .decimalPlaces(0)
-      
-      console.info(`submitting bid of ${buyTokenAmount} ${} for ${sellTokenAmount} ${}`)
 
       // Bid on the auction
       const [auctionSellTokenWithdrawn, auctionBuyTokenWithdrawn] = await executeBid(
@@ -141,5 +138,17 @@ const multiBidStrategy = async () => {
   })
 }
 
-discountBidStrategy()
-multiBidStrategy()
+function bid() {
+  if (process.argv[0] == 'multi') {
+    multiBidStrategy()
+  }
+  else if (process.argv[0] == 'simple') {
+    simpleBidStrategy()
+  }
+  else {
+    console.info('please specify which strategy to run: simple or multi')
+  }
+}
+
+bid()
+

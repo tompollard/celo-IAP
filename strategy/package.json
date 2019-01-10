@@ -13,7 +13,9 @@
   },
   "scripts": {
     "postinstall": "yarn run celo-sdk mitiapstaging && yarn run tsc -b",
-    "rebalance": "yarn run ts-node src/rebalance.ts"
+    "rebalance": "yarn run ts-node src/rebalance.ts",
+    "simple-bid": "yarn run ts-node src/bid.ts simple",
+    "multi-bid": "yarn run ts-node src/bid.ts multi"
   },
   "license": "MIT",
   "private": true
