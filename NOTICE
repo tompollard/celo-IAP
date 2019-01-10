@@ -3,6 +3,6 @@ Copyright (c) 2018-2019 A Protocol, Inc.
 
 See LICENSE file for license information.
 
-This product incorporates portions of BokkyPooBahsRedBlackTreeLibrary 
-Copyright (c) 2018 The Officious BokkyPooBah
-https://github.com/bokkypoobah/BokkyPooBahsRedBlackTreeLibrary/
+This product incorporates portions of rbt-solidity 
+Copyright (c) 2017 ATLANT Platform
+https://github.com/Dvisacker/rbt-solidity
