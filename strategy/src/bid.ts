@@ -1,5 +1,4 @@
 import * as _ from 'lodash'
-import { BigNumber } from 'bignumber.js'
 import Web3 = require('web3')
 
 
@@ -8,10 +7,11 @@ import Exchange from '@celo/sdk/dist/contracts/Exchange'
 import GoldToken from '@celo/sdk/dist/contracts/GoldToken'
 import StableToken from '@celo/sdk/dist/contracts/StableToken'
 import { unlockAccount } from '@celo/sdk/dist/src/account-utils'
-import { executeBid, findAuctionInProgress } from '@celo/sdk/dist/src/auction-utils'
+import { executeBid } from '@celo/sdk/dist/src/auction-utils'
 import { exchangePrice } from '@celo/sdk/dist/src/exchange-utils'
 import {
-  selectTokenContractByAddress,
+  balanceOf,
+  selectTokenContractByIdentifier,
 } from '@celo/sdk/dist/src/erc20-utils'
 import { Exchange as ExchangeType } from '@celo/sdk/types/Exchange'
 
@@ -24,6 +24,10 @@ const numBids = 5       // The number of bids to make, centered around bidAmount
 const bidRange = 0.1    // Spread of bids
 
 const simpleBidStrategy = async () => {
+  const argv = require('minimist')(process.argv.slice(2), {
+    string: ['host'],
+    default: { host: 'localhost', noUnlock: true },
+  })
   // @ts-ignore
   const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
   const exchange: ExchangeType = await Exchange(web3)
@@ -38,19 +42,18 @@ const simpleBidStrategy = async () => {
   // ask for tokens such that we get a 10% discount relative to the current price quoted
   // on the exchange.
   auction.events.AuctionStarted().on('data', async (event: any) => {
-    const sellToken = selectTokenContractByAddress(
+    const sellToken = selectTokenContractByIdentifier(
       [stableToken, goldToken],
       event.returnValues.sellToken
     )
-    const buyToken = selectTokenContractByAddress(
+    const buyToken = selectTokenContractByIdentifier(
       [stableToken, goldToken],
       event.returnValues.buyToken
     )
 
-    const currentAuction = findAuctionInProgress(stableToken, goldToken, auction)
     // Aim to sell up to 90% of our sellToken balance in the auction.
     // TODO*asa): Does this work with GoldToken?
-    const sellTokenBalance = new BigNumber(await currentAuction.sellToken.methods.balanceOf(account).call())
+    const sellTokenBalance = await balanceOf(sellToken, account, web3)
     const sellTokenAmount = sellTokenBalance.times(0.9)
 
 
@@ -79,6 +82,10 @@ const simpleBidStrategy = async () => {
 }
 
 const multiBidStrategy = async () => {
+  const argv = require('minimist')(process.argv.slice(2), {
+    string: ['host'],
+    default: { host: 'localhost', noUnlock: true },
+  })
   // @ts-ignore
   const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
   const exchange: ExchangeType = await Exchange(web3)
@@ -93,18 +100,17 @@ const multiBidStrategy = async () => {
   // ask for tokens such that we get a 10% discount relative to the current price quoted
   // on the exchange.
   auction.events.AuctionStarted().on('data', async (event: any) => {
-    const sellToken = selectTokenContractByAddress(
+    const sellToken = selectTokenContractByIdentifier(
       [stableToken, goldToken],
       event.returnValues.sellToken
     )
-    const buyToken = selectTokenContractByAddress(
+    const buyToken = selectTokenContractByIdentifier(
       [stableToken, goldToken],
       event.returnValues.buyToken
     )
 
-    const currentAuction = findAuctionInProgress(stableToken, goldToken, auction)
 
-    const sellTokenBalance = new BigNumber(await currentAuction.sellToken.methods.balanceOf(account).call())
+    const sellTokenBalance = await balanceOf(sellToken, account, web3)
     const sellTokenAmount = sellTokenBalance.times(0.9).times(1.0/numBids)
 
     const price = await exchangePrice(exchange, buyToken, sellToken)
@@ -115,7 +121,7 @@ const multiBidStrategy = async () => {
       bidRange / numBids
     )
     
-    buyTokenDeltas.forEach(delta => {
+    buyTokenDeltas.forEach( async(delta) => {
       const buyTokenAmount = sellTokenAmount
         .times(price)
         .times(delta + randomFactor)
@@ -138,15 +144,15 @@ const multiBidStrategy = async () => {
   })
 }
 
-function bid() {
-  if (process.argv[0] == 'multi') {
+const bid = async () => {
+  if (process.argv[2] == 'multi') {
     multiBidStrategy()
   }
-  else if (process.argv[0] == 'simple') {
+  else if (process.argv[2] == 'simple') {
     simpleBidStrategy()
   }
   else {
-    console.info('please specify which strategy to run: simple or multi')
+    throw new Error('please specify which strategy to run: simple or multi')
   }
 }
 
