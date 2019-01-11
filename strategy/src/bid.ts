@@ -64,7 +64,7 @@ const simpleBidStrategy = async (web3: any, argv: any) => {
       .decimalPlaces(0)
 
     console.info(
-      `Bidding ${await parseFromContractDecimals(sellTokenAmount, sellToken)} ${sellTokenSymbol} for ${await parseFromContractDecimals(buyTokenAmount, buyToken)} ${await buyToken.methods.symbol().call()} ${await parseFromContractDecimals(buyTokenAmount, buyToken)}`
+      `Bidding ${await parseFromContractDecimals(sellTokenAmount, sellToken)} ${sellTokenSymbol} for ${await parseFromContractDecimals(buyTokenAmount, buyToken)} ${await buyToken.methods.symbol().call()}`
     )
 
     const [auctionSellTokenWithdrawn, auctionBuyTokenWithdrawn] = await executeBid(
@@ -77,10 +77,17 @@ const simpleBidStrategy = async (web3: any, argv: any) => {
       web3
     )
     console.info('Bid successfully executed!')
-    console.info(
-      `${await sellToken.methods.symbol().call()} withdrawn: ${auctionSellTokenWithdrawn}`
-    )
-    console.info(`${await buyToken.methods.symbol().call()} withdrawn: ${auctionBuyTokenWithdrawn}`)
+
+    if (parseInt(auctionSellTokenWithdrawn) > 0) {
+      console.info(
+        `Withdrew ${await parseFromContractDecimals(auctionSellTokenWithdrawn, sellToken)} ${await sellToken.methods.symbol().call()} from the auction`
+      )
+    }
+    if (parseInt(auctionBuyTokenWithdrawn) > 0) {
+      console.info(
+        `Withdrew ${await parseFromContractDecimals(auctionBuyTokenWithdrawn, buyToken)} ${await buyToken.methods.symbol().call()} from the auction`
+      )
+    }
   })
 }
 
