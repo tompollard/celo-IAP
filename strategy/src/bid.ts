@@ -26,30 +26,37 @@ const FOUR_WEEKS = 4 * 7 * 24 * 3600
 // This implements a simple auction strategy. We bid 90% of our balance in the auction and
 // ask for tokens such that we get a 10% discount relative to the current price quoted
 // on the exchange.
-const simpleBidStrategy = async (web3: any) => {
-
+const simpleBidStrategy = async (web3: any, account: string) => {
   // Initialize contract objects
   const exchange: ExchangeType = await Exchange(web3)
   const auction = await BSTAuction(web3)
   const stableToken = await StableToken(web3)
   const goldToken = await GoldToken(web3)
-  const account = await unlockAccount(web3, FOUR_WEEKS) // Unlock for 4 weeks so our strategy can run.
+
+  if (!argv.noUnlock) {
+    // TODO(asa): Don't unlock when already unlocked, won't work with the miner as is
+    account = await unlockAccount(web3, FOUR_WEEKS) // Unlock for 4 weeks so our strategy can run.
+  } else {
+    const accounts = await web3.eth.getAccounts()
+    account = accounts[0]
+  }
 
   auction.events.AuctionStarted().on('data', async (event: any) => {
     const sellToken = selectContractByAddress(
       [stableToken, goldToken],
       event.returnValues.sellToken
     )
-    const buyToken = selectContractByAddress(
-      [stableToken, goldToken],
-      event.returnValues.buyToken
-    )
+    const buyToken = selectContractByAddress([stableToken, goldToken], event.returnValues.buyToken)
 
     const sellTokenBalance = await balanceOf(sellToken, account, web3)
-    const sellTokenAmount = sellTokenBalance
-      .times(balanceProportionToBid)
-      .decimalPlaces(0)
-    
+    const sellTokenAmount = sellTokenBalance.times(balanceProportionToBid).decimalPlaces(0)
+
+    console.info(
+      `your current balance of ${await sellToken.methods
+        .symbol()
+        .call()} is ${sellTokenBalance}, and we will bid ${sellTokenAmount} in this auction`
+    )
+
     const bidAdjustment = bidDiscount + randomFactor
 
     const price = await exchangePrice(exchange, buyToken, sellToken)
@@ -59,6 +66,14 @@ const simpleBidStrategy = async (web3: any) => {
       .decimalPlaces(0)
 
     // Bid on the auction
+    console.info(
+      `Bidding on auction with ${await sellToken.methods
+        .symbol()
+        .call()} ${sellTokenAmount} to purchase ${await buyToken.methods
+        .symbol()
+        .call()} ${buyTokenAmount}`
+    )
+
     const [auctionSellTokenWithdrawn, auctionBuyTokenWithdrawn] = await executeBid(
       auction,
       sellToken,
@@ -68,17 +83,20 @@ const simpleBidStrategy = async (web3: any) => {
       account,
       web3
     )
-    console.info(`Bid successfully executed!\n Sell Token Amount Withdrawn: ${auctionSellTokenWithdrawn}\n Buy Token Amount Withdrawn: ${auctionBuyTokenWithdrawn}`)
+    console.info('Bid successfully executed!')
+    console.info(
+      `${await sellToken.methods.symbol().call()} withdrawn: ${auctionSellTokenWithdrawn}`
+    )
+    console.info(`${await buyToken.methods.symbol().call()} withdrawn: ${auctionBuyTokenWithdrawn}`)
   })
 }
 
-const multiBidStrategy = async (web3: any) => {
+const multiBidStrategy = async (web3: any, account: string) => {
 
   const exchange: ExchangeType = await Exchange(web3)
   const auction = await BSTAuction(web3)
   const stableToken = await StableToken(web3)
   const goldToken = await GoldToken(web3)
-  const account = await unlockAccount(web3, FOUR_WEEKS) // Unlock for 4 weeks so our strategy can run.
 
   auction.events.AuctionStarted().on('data', async (event: any) => {
     const sellToken = selectContractByAddress(
@@ -103,7 +121,7 @@ const multiBidStrategy = async (web3: any) => {
       bidDiscount + bidRange,
       bidRange / numBids
     )
-    
+
     buyTokenDeltas.forEach( async(delta) => {
       const buyTokenAmount = sellTokenAmount
         .times(price)
@@ -131,13 +149,23 @@ const bid = async () => {
     string: ['host'],
     default: { host: 'localhost', noUnlock: true },
   })
+
+  let account: string;
+  
   // @ts-ignore
   const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
+  if (!argv.noUnlock) {
+    // TODO(asa): Don't unlock when already unlocked, won't work with the miner as is
+    account = await unlockAccount(web3, FOUR_WEEKS) // Unlock for 4 weeks so our strategy can run.
+  } else {
+    const accounts = await web3.eth.getAccounts()
+    account = accounts[0]
+  }
   if (process.argv[2] == 'multi') {
-    multiBidStrategy(web3)
+    multiBidStrategy(web3, account)
   }
   else if (process.argv[2] == 'simple') {
-    simpleBidStrategy(web3)
+    simpleBidStrategy(web3, account)
   }
   else {
     throw new Error('please specify which strategy to run: simple or multi')
