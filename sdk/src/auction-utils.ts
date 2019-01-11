@@ -251,6 +251,6 @@ export async function executeBid(
   await fillBid(auction, sellToken.options.address, buyToken.options.address, bidIndex)
   return await Promise.all([
     withdraw(auction, sellToken.options.address, account),
-    withdraw(auction, sellToken.options.address, account),
+    withdraw(auction, buyToken.options.address, account),
   ])
 }

@@ -5,7 +5,7 @@
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "scripts": {
-    "build": "node bin/celo-sdk.js mitiapstaging && yarn run tsc",
+    "build": "node bin/celo-sdk.js mitiapproduction && yarn run tsc",
     "lint": "yarn run tslint -c tslint.json --project tsconfig.json"
   },
   "bin": {

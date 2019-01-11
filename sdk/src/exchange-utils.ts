@@ -12,7 +12,7 @@ export async function exchangePrice(
   buyToken: TokenType
 ) {
   const price = await exchange.methods
-    .getTokenPrice(buyToken.options.address, sellToken.options.address)
+    .getTokenPrice(sellToken.options.address, buyToken.options.address)
     .call()
   return new BigNumber(price[0]).div(price[1])
 }
@@ -25,8 +25,8 @@ export async function getBuyTokenAmount(
 ) {
   return exchange.methods
     .getBuyTokenAmount(
-      buyToken.options.address,
       sellToken.options.address,
+      buyToken.options.address,
       sellTokenAmount.toString()
     )
     .call()
@@ -40,8 +40,8 @@ export async function getSellTokenAmount(
 ) {
   return exchange.methods
     .getSellTokenAmount(
-      buyToken.options.address,
       sellToken.options.address,
+      buyToken.options.address,
       buyTokenAmount.toString()
     )
     .call()
@@ -120,8 +120,8 @@ export async function exchangeToken(
 ) {
   return await sendTransaction(
     exchange.methods.exchange(
-      buyTokenAddress,
       sellTokenAddress,
+      buyTokenAddress,
       sellTokenAmount.toString(),
       minBuyTokenAmount.toString()
     ),
