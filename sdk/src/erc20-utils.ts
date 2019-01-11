@@ -30,6 +30,13 @@ export async function convertToContractDecimals(value: number | BigNumber, contr
   return one.times(value)
 }
 
+export async function parseFromContractDecimals(value: BigNumber, contract: TokenType) {
+  // @ts-ignore
+  const decimals = new BigNumber(await contract.methods.decimals().call())
+  const one = new BigNumber(10).pow(decimals.toNumber())
+  return value.div(one)
+}
+
 export async function selectTokenContractByIdentifier(contracts: TokenType[], identifier: string) {
   const identifiers = await Promise.all(
     // @ts-ignore
