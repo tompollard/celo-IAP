@@ -8,7 +8,7 @@ import { unlockAccount } from '@celo/sdk/dist/src/account-utils'
 import { executeBid } from '@celo/sdk/dist/src/auction-utils'
 import { selectContractByAddress } from '@celo/sdk/dist/src/contract-utils'
 import { exchangePrice } from '@celo/sdk/dist/src/exchange-utils'
-import { balanceOf } from '@celo/sdk/dist/src/erc20-utils'
+import { balanceOf, parseFromContractDecimals } from '@celo/sdk/dist/src/erc20-utils'
 import { Exchange as ExchangeType } from '@celo/sdk/types/Exchange'
 
 // Strategy parameters (feel free to play around with these)
@@ -30,7 +30,6 @@ const simpleBidStrategy = async (web3: any, argv: any) => {
 
   let account: string
   if (!argv.noUnlock) {
-    // TODO(asa): Don't unlock when already unlocked, won't work with the miner as is
     account = await unlockAccount(web3, FOUR_WEEKS) // Unlock for 4 weeks so our strategy can run.
   } else {
     const accounts = await web3.eth.getAccounts()
@@ -45,13 +44,16 @@ const simpleBidStrategy = async (web3: any, argv: any) => {
     const buyToken = selectContractByAddress([stableToken, goldToken], event.returnValues.buyToken)
 
     const sellTokenBalance = await balanceOf(sellToken, account, web3)
+    const sellTokenSymbol = await sellToken.methods.symbol().call()
+    // Tokens are divisible by 10^-d, where d typically equals 18. The balance returned by balanceOf
+    // is in the smalled currency unit, and thus needs to be converted into a more readable number.
+    // For example, for a token with d == 18, if balanceOf returns 1,800,000,000,000,000,000 we
+    // would want to log a balance of 1.8.
+    console.info(
+      `Your current balance of ${sellTokenSymbol} is ${await parseFromContractDecimals(sellTokenBalance, sellToken)}`
+    )
     const sellTokenAmount = sellTokenBalance.times(balanceProportionToBid).decimalPlaces(0)
 
-    console.info(
-      `your current balance of ${await sellToken.methods
-        .symbol()
-        .call()} is ${sellTokenBalance}, and we will bid ${sellTokenAmount} in this auction`
-    )
 
     const bidAdjustment = bidDiscount + randomFactor
 
@@ -61,13 +63,8 @@ const simpleBidStrategy = async (web3: any, argv: any) => {
       .times(bidAdjustment)
       .decimalPlaces(0)
 
-    // Bid on the auction
     console.info(
-      `Bidding on auction with ${await sellToken.methods
-        .symbol()
-        .call()} ${sellTokenAmount} to purchase ${await buyToken.methods
-        .symbol()
-        .call()} ${buyTokenAmount}`
+      `Bidding ${await parseFromContractDecimals(sellTokenAmount, sellToken)} ${sellTokenSymbol} for ${await parseFromContractDecimals(buyTokenAmount, buyToken)} ${await buyToken.methods.symbol().call()} ${await parseFromContractDecimals(buyTokenAmount, buyToken)}`
     )
 
     const [auctionSellTokenWithdrawn, auctionBuyTokenWithdrawn] = await executeBid(
@@ -90,7 +87,7 @@ const simpleBidStrategy = async (web3: any, argv: any) => {
 const bid = async () => {
   const argv = require('minimist')(process.argv.slice(2), {
     string: ['host'],
-    default: { host: 'localhost', noUnlock: true },
+    default: { host: 'localhost', noUnlock: false },
   })
   // @ts-ignore
   const web3: Web3 = new Web3(`ws://${argv.host}:8546`)
